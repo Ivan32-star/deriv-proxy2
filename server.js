@@ -84,10 +84,8 @@ function conectarDeriv() {
 
       if (parsed.candles && parsed.candles.length > 0) {
         const ultimaVela = parsed.candles[parsed.candles.length - 1];
-
         const open = parseFloat(ultimaVela.open);
         const close = parseFloat(ultimaVela.close);
-
         const tendencia = close > open ? 'ALCISTA' : (close < open ? 'BAJISTA' : 'LATERAL');
 
         ultimaSenal = {
