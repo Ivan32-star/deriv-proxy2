@@ -9,66 +9,63 @@ app.use(cors());
 
 let ultimaSenal = { mensaje: 'Aún no hay datos disponibles' };
 
-// Conectar al WebSocket real de Deriv
-const ws = new WebSocket('wss://ws.deriv.com/websockets/v3?app_id=1089');
+let ws;
 
-ws.on('open', () => {
-  console.log('📡 Conectado al WebSocket de Deriv (V75)');
+function connect() {
+  ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
 
-  // Solicitar datos de velas para Volatility 75
-  ws.send(JSON.stringify({
-    ticks_history: 'R_75',
-    adjust_start_time: 1,
-    count: 100,
-    end: 'latest',
-    start: 1,
-    style: 'candles',
-    granularity: 60, // Velas de 1 minuto
-    subscribe: 1
-  }));
-});
+  ws.on('open', () => {
+    console.log('📡 Conectado al WebSocket de Deriv (V75)');
 
-ws.on('message', (data) => {
-  const parsed = JSON.parse(data);
+    // Solicitar datos de velas para Volatility 75
+    ws.send(JSON.stringify({
+      ticks_history: 'R_75',
+      adjust_start_time: 1,
+      count: 100,
+      end: 'latest',
+      start: 1,
+      style: 'candles',
+      granularity: 60, // Velas de 1 minuto
+      subscribe: 1
+    }));
+  });
 
-  if (parsed.candles && parsed.candles.length > 0) {
-    const ultimasVelas = parsed.candles;
-    const ultimaVela = ultimasVelas[ultimasVelas.length - 1];
+  ws.on('message', (data) => {
+    const parsed = JSON.parse(data);
 
-    const open = parseFloat(ultimaVela.open);
-    const close = parseFloat(ultimaVela.close);
+    if (parsed.candles && parsed.candles.length > 0) {
+      const ultimasVelas = parsed.candles;
+      const ultimaVela = ultimasVelas[ultimasVelas.length - 1];
 
-    const tendencia = close > open ? 'ALCISTA' : (close < open ? 'BAJISTA' : 'LATERAL');
+      const open = parseFloat(ultimaVela.open);
+      const close = parseFloat(ultimaVela.close);
 
-    ultimaSenal = {
-      tiempo: new Date(ultimaVela.epoch * 1000).toLocaleString(),
-      open,
-      close,
-      tendencia,
-      mensaje: `Tendencia detectada: ${tendencia}`
-    };
+      const tendencia = close > open ? 'ALCISTA' : (close < open ? 'BAJISTA' : 'LATERAL');
 
-    console.log(`✅ Vela ${tendencia} - Open: ${open} | Close: ${close}`);
-  }
-});
+      ultimaSenal = {
+        tiempo: new Date(ultimaVela.epoch * 1000).toLocaleString(),
+        open,
+        close,
+        tendencia,
+        mensaje: `Tendencia detectada: ${tendencia}`
+      };
 
-ws.on('error', (err) => {
-  console.error('❌ Error en WebSocket Deriv:', err.message);
-});
+      console.log(`✅ Vela ${tendencia} - Open: ${open} | Close: ${close}`);
+    }
+  });
 
-ws.on('close', () => {
-  console.log('🔁 Conexión cerrada. Reintentando en 5 segundos...');
-  setTimeout(() => reconnect(), 5000);
-});
+  ws.on('error', (err) => {
+    console.error('❌ Error en WebSocket Deriv:', err.message);
+  });
 
-function reconnect() {
-  console.log('♻️ Reintentando conexión a Deriv...');
-  const newWs = new WebSocket('wss://ws.deriv.com/websockets/v3?app_id=1089');
-  newWs.on('open', ws.listeners('open')[0]);
-  newWs.on('message', ws.listeners('message')[0]);
-  newWs.on('error', ws.listeners('error')[0]);
-  newWs.on('close', ws.listeners('close')[0]);
+  ws.on('close', () => {
+    console.log('🔁 Conexión cerrada. Reintentando en 5 segundos...');
+    setTimeout(connect, 5000);
+  });
 }
+
+// Iniciar conexión
+connect();
 
 // Ruta para ver la señal actual como JSON
 app.get('/api/senal', (req, res) => {
