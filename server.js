@@ -22,6 +22,7 @@ const wss = new WebSocket.Server({ server });
 wss.on('connection', ws => {
   console.log('🔗 Cliente conectado al WebSocket interno');
 
+  // Enviar última señal al conectar
   ws.send(JSON.stringify({ type: 'senal', data: ultimaSenal }));
 
   ws.on('message', msg => {
@@ -31,11 +32,18 @@ wss.on('connection', ws => {
       if (json.type === 'config' && json.granularity) {
         config.granularity = json.granularity;
 
-        if (derivWs) derivWs.close();
+        if (derivWs) {
+          derivWs.removeAllListeners(); // Limpiar listeners anteriores
+          derivWs.close();
+          derivWs = null;
+        }
 
         console.log('⚙️ Configuración actualizada:', config);
 
         ws.send(JSON.stringify({ type: 'config', status: 'ok', config }));
+
+        // Reconectar con nueva configuración
+        conectarDeriv();
       }
     } catch (e) {
       console.error('Mensaje no válido:', msg);
@@ -47,10 +55,16 @@ wss.on('connection', ws => {
   });
 });
 
-let derivWs;
+let derivWs = null;
 let reconectando = false;
 
 function conectarDeriv() {
+  if (derivWs) {
+    derivWs.removeAllListeners();
+    derivWs.close();
+    derivWs = null;
+  }
+
   derivWs = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
 
   derivWs.on('open', () => {
@@ -69,33 +83,37 @@ function conectarDeriv() {
   });
 
   derivWs.on('message', data => {
-    const parsed = JSON.parse(data);
+    try {
+      const parsed = JSON.parse(data);
 
-    if (parsed.candles && parsed.candles.length > 0) {
-      const ultimaVela = parsed.candles[parsed.candles.length - 1];
+      if (parsed.candles && parsed.candles.length > 0) {
+        const ultimaVela = parsed.candles[parsed.candles.length - 1];
 
-      const open = parseFloat(ultimaVela.open);
-      const close = parseFloat(ultimaVela.close);
+        const open = parseFloat(ultimaVela.open);
+        const close = parseFloat(ultimaVela.close);
 
-      const tendencia = close > open ? 'ALCISTA' : (close < open ? 'BAJISTA' : 'LATERAL');
+        const tendencia = close > open ? 'ALCISTA' : (close < open ? 'BAJISTA' : 'LATERAL');
 
-      ultimaSenal = {
-        tiempo: new Date(ultimaVela.epoch * 1000).toLocaleString(),
-        open,
-        close,
-        tendencia,
-        mensaje: `Tendencia detectada: ${tendencia}`
-      };
+        ultimaSenal = {
+          tiempo: new Date(ultimaVela.epoch * 1000).toLocaleString(),
+          open,
+          close,
+          tendencia,
+          mensaje: `Tendencia detectada: ${tendencia}`
+        };
 
-      if (wss && wss.clients.size > 0) {
-        wss.clients.forEach(client => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({ type: 'senal', data: ultimaSenal }));
-          }
-        });
+        if (wss && wss.clients.size > 0) {
+          wss.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify({ type: 'senal', data: ultimaSenal }));
+            }
+          });
+        }
+
+        console.log(`✅ Vela ${tendencia} - Open: ${open} | Close: ${close}`);
       }
-
-      console.log(`✅ Vela ${tendencia} - Open: ${open} | Close: ${close}`);
+    } catch (error) {
+      console.error('❌ Error al procesar mensaje de Deriv:', error.message);
     }
   });
 
@@ -106,3 +124,21 @@ function conectarDeriv() {
   derivWs.on('close', () => {
     console.log('🔁 Conexión Deriv cerrada. Reintentando en 5 segundos...');
     if (!reconectando) {
+      reconectando = true;
+      setTimeout(() => {
+        reconectando = false;
+        conectarDeriv();
+      }, 5000);
+    }
+  });
+}
+
+conectarDeriv();
+
+app.get('/api/senal', (req, res) => {
+  res.json(ultimaSenal);
+});
+
+app.get('/', (req, res) => {
+  res.send('🔗 Proxy y puerta trasera activa para Deriv V75');
+});
