@@ -1,79 +1,56 @@
-const WebSocket = require('ws');
-const https = require('https');
 const express = require('express');
 const cors = require('cors');
+const WebSocket = require('ws');
+
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
-// URL de WebSocket temporal para prueba (servidor de eco)
-const DERIV_API_URL = 'wss://echo.websocket.events';
+let mensajeRecibido = 'Aún no hay mensajes del WebSocket';
 
-let ws;
-
+// Middleware
 app.use(cors());
 
-let ultimaRespuesta = {
-  mensaje: 'Aún no hay datos',
-  rsi: null,
-  adx: null,
-  tendencia: null,
-  precio: null,
-  hora: null
-};
+// Ruta principal
+app.get('/', (req, res) => {
+  res.send(`
+    <h1>🔗 Proxy conectado</h1>
+    <p><strong>Último mensaje del WebSocket:</strong> ${mensajeRecibido}</p>
+    <p>Visita <code>/api/senal</code> para obtener los datos como JSON.</p>
+  `);
+});
 
-const opcionesWS = {
-  headers: {
-    'User-Agent': 'Mozilla/5.0'
-  },
-  agent: new https.Agent({
-    servername: 'echo.websocket.events',
-    rejectUnauthorized: true
-  })
-};
+// Ruta API
+app.get('/api/senal', (req, res) => {
+  res.json({ mensaje: mensajeRecibido });
+});
 
-function conectarDeriv() {
-  ws = new WebSocket(DERIV_API_URL, opcionesWS);
+// Iniciar WebSocket de prueba
+function conectarWebSocket() {
+  const ws = new WebSocket('wss://echo.websocket.events');
 
   ws.on('open', () => {
     console.log('📡 Conectado a WebSocket de prueba (echo)');
-
-    // Enviar mensaje de prueba al servidor de eco
     ws.send('Hola desde el proxy de prueba');
   });
 
   ws.on('message', (data) => {
-    console.log('Mensaje recibido:', data);
-
-    ultimaRespuesta = {
-      ...ultimaRespuesta,
-      mensaje: `Eco recibido: ${data}`,
-      hora: new Date().toLocaleTimeString()
-    };
+    const mensaje = data.toString();
+    console.log('Mensaje recibido:', mensaje);
+    mensajeRecibido = mensaje;
   });
 
   ws.on('close', () => {
     console.log('🔁 Conexión cerrada. Reintentando en 5 segundos...');
-    setTimeout(conectarDeriv, 5000);
+    setTimeout(conectarWebSocket, 5000);
   });
 
   ws.on('error', (err) => {
-    console.error('❌ Error en WebSocket de prueba:', err.message);
+    console.error('❌ Error en WebSocket:', err.message);
   });
 }
 
-app.get('/', (req, res) => {
-  res.send(`
-    <h1>📈 Panel de Señales - Proxy de Prueba</h1>
-    <p><strong>Mensaje:</strong> ${ultimaRespuesta.mensaje}</p>
-    <p><strong>Hora:</strong> ${ultimaRespuesta.hora || '...'}</p>
-  `);
-});
-
-app.get('/api/senal', (req, res) => {
-  res.json(ultimaRespuesta);
-});
-
+// Iniciar servidor y WebSocket
 app.listen(PORT, () => {
   console.log(`🚀 Servidor en http://localhost:${PORT}`);
-  conectarDeriv();
+  conectarWebSocket();
 });
