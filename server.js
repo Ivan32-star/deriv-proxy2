@@ -8,23 +8,20 @@ const port = process.env.PORT || 10000;
 app.use(cors());
 
 let config = {
-  granularity: 60, // duración de la vela en segundos (1 minuto)
+  granularity: 60,
 };
 
-let ultimaSenal = { mensaje: 'Aún no hay datos' };
+let ultimaSenal = { mensaje: 'Aún no hay datos disponibles' };
 
-// Servidor HTTP
 const server = app.listen(port, () => {
   console.log(`🚀 Servidor HTTP en http://localhost:${port}`);
 });
 
-// Servidor WebSocket propio para clientes (tú y yo)
 const wss = new WebSocket.Server({ server });
 
 wss.on('connection', ws => {
   console.log('🔗 Cliente conectado al WebSocket interno');
 
-  // Enviar última señal al conectar
   ws.send(JSON.stringify({ type: 'senal', data: ultimaSenal }));
 
   ws.on('message', msg => {
@@ -54,7 +51,7 @@ let derivWs;
 let reconectando = false;
 
 function conectarDeriv() {
-  new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
+  derivWs = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
 
   derivWs.on('open', () => {
     console.log('📡 Conectado a WebSocket de Deriv');
