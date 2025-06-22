@@ -22,7 +22,6 @@ const wss = new WebSocket.Server({ server });
 wss.on('connection', ws => {
   console.log('🔗 Cliente conectado al WebSocket interno');
 
-  // Enviar última señal al conectar
   ws.send(JSON.stringify({ type: 'senal', data: ultimaSenal }));
 
   ws.on('message', msg => {
@@ -33,20 +32,17 @@ wss.on('connection', ws => {
         config.granularity = json.granularity;
 
         if (derivWs) {
-          derivWs.removeAllListeners(); // Limpiar listeners anteriores
+          derivWs.removeAllListeners();
           derivWs.close();
           derivWs = null;
         }
 
         console.log('⚙️ Configuración actualizada:', config);
-
         ws.send(JSON.stringify({ type: 'config', status: 'ok', config }));
-
-        // Reconectar con nueva configuración
         conectarDeriv();
       }
     } catch (e) {
-      console.error('Mensaje no válido:', msg);
+      console.error('❌ Mensaje no válido:', msg);
     }
   });
 
@@ -102,27 +98,25 @@ function conectarDeriv() {
           mensaje: `Tendencia detectada: ${tendencia}`
         };
 
-        if (wss && wss.clients.size > 0) {
-          wss.clients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN) {
-              client.send(JSON.stringify({ type: 'senal', data: ultimaSenal }));
-            }
-          });
-        }
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ type: 'senal', data: ultimaSenal }));
+          }
+        });
 
-        console.log(`✅ Vela ${tendencia} - Open: ${open} | Close: ${close}`);
+        console.log(`✅ Vela ${tendencia} - Apertura: ${open} | Cierre: ${close}`);
       }
-    } catch (error) {
-      console.error('❌ Error al procesar mensaje de Deriv:', error.message);
+    } catch (err) {
+      console.error('❌ Error procesando datos:', err.message);
     }
   });
 
   derivWs.on('error', err => {
-    console.error('❌ Error WebSocket Deriv:', err.message);
+    console.error('❌ Error en WebSocket Deriv:', err.message);
   });
 
   derivWs.on('close', () => {
-    console.log('🔁 Conexión Deriv cerrada. Reintentando en 5 segundos...');
+    console.log('🔁 Conexión cerrada. Reintentando en 5 segundos...');
     if (!reconectando) {
       reconectando = true;
       setTimeout(() => {
