@@ -8,7 +8,7 @@ const port = process.env.PORT || 10000;
 app.use(cors());
 
 let config = {
-  granularity: 60,
+  granularity: 60, // duración de la vela en segundos (1 minuto)
 };
 
 let ultimaSenal = { mensaje: 'Aún no hay datos' };
@@ -24,6 +24,7 @@ const wss = new WebSocket.Server({ server });
 wss.on('connection', ws => {
   console.log('🔗 Cliente conectado al WebSocket interno');
 
+  // Enviar última señal al conectar
   ws.send(JSON.stringify({ type: 'senal', data: ultimaSenal }));
 
   ws.on('message', msg => {
