@@ -106,21 +106,3 @@ function conectarDeriv() {
   derivWs.on('close', () => {
     console.log('🔁 Conexión Deriv cerrada. Reintentando en 5 segundos...');
     if (!reconectando) {
-      reconectando = true;
-      setTimeout(() => {
-        reconectando = false;
-        conectarDeriv();
-      }, 5000);
-    }
-  });
-}
-
-conectarDeriv();
-
-app.get('/api/senal', (req, res) => {
-  res.json(ultimaSenal);
-});
-
-app.get('/', (req, res) => {
-  res.send('🔗 Proxy y puerta trasera activa para Deriv V75');
-});
