@@ -7,35 +7,37 @@ const port = process.env.PORT || 10000;
 
 app.use(cors());
 
-let ultimaSenal = { mensaje: 'Aún no hay datos disponibles' };
+let config = {
+  granularity: 60, // duración de vela en segundos
+};
 
-let ws;
+let ultimaSenal = { mensaje: 'Aún no hay datos' };
 
-function connect() {
-  ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
+// Conexión WebSocket a Deriv (V75)
+let derivWs;
+function conectarDeriv() {
+  derivWs = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
 
-  ws.on('open', () => {
-    console.log('📡 Conectado al WebSocket de Deriv (V75)');
+  derivWs.on('open', () => {
+    console.log('📡 Conectado a WebSocket de Deriv');
 
-    // Solicitar datos de velas para Volatility 75
-    ws.send(JSON.stringify({
+    derivWs.send(JSON.stringify({
       ticks_history: 'R_75',
       adjust_start_time: 1,
       count: 100,
       end: 'latest',
       start: 1,
       style: 'candles',
-      granularity: 60, // Velas de 1 minuto
-      subscribe: 1
+      granularity: config.granularity,
+      subscribe: 1,
     }));
   });
 
-  ws.on('message', (data) => {
+  derivWs.on('message', data => {
     const parsed = JSON.parse(data);
 
     if (parsed.candles && parsed.candles.length > 0) {
-      const ultimasVelas = parsed.candles;
-      const ultimaVela = ultimasVelas[ultimasVelas.length - 1];
+      const ultimaVela = parsed.candles[parsed.candles.length - 1];
 
       const open = parseFloat(ultimaVela.open);
       const close = parseFloat(ultimaVela.close);
@@ -50,33 +52,72 @@ function connect() {
         mensaje: `Tendencia detectada: ${tendencia}`
       };
 
+      // Notificar a clientes WebSocket conectados
+      wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ type: 'senal', data: ultimaSenal }));
+        }
+      });
+
       console.log(`✅ Vela ${tendencia} - Open: ${open} | Close: ${close}`);
     }
   });
 
-  ws.on('error', (err) => {
-    console.error('❌ Error en WebSocket Deriv:', err.message);
+  derivWs.on('error', err => {
+    console.error('❌ Error WebSocket Deriv:', err.message);
   });
 
-  ws.on('close', () => {
-    console.log('🔁 Conexión cerrada. Reintentando en 5 segundos...');
-    setTimeout(connect, 5000);
+  derivWs.on('close', () => {
+    console.log('🔁 Conexión Deriv cerrada. Reintentando en 5 segundos...');
+    setTimeout(conectarDeriv, 5000);
   });
 }
 
-// Iniciar conexión
-connect();
+conectarDeriv();
 
-// Ruta para ver la señal actual como JSON
+// Servidor Express
 app.get('/api/senal', (req, res) => {
   res.json(ultimaSenal);
 });
 
-// Ruta principal
 app.get('/', (req, res) => {
-  res.send('🔗 Proxy de señales de Deriv V75 activo');
+  res.send('🔗 Proxy y puerta trasera activa para Deriv V75');
 });
 
-app.listen(port, () => {
-  console.log(`🚀 Servidor en http://localhost:${port}`);
+const server = app.listen(port, () => {
+  console.log(`🚀 Servidor HTTP en http://localhost:${port}`);
+});
+
+// Servidor WebSocket propio para clientes (tú y yo)
+const wss = new WebSocket.Server({ server });
+
+wss.on('connection', ws => {
+  console.log('🔗 Cliente conectado al WebSocket interno');
+
+  // Al conectar, enviamos la última señal
+  ws.send(JSON.stringify({ type: 'senal', data: ultimaSenal }));
+
+  // Recibir mensajes (para controlar/configurar)
+  ws.on('message', msg => {
+    try {
+      const json = JSON.parse(msg);
+
+      if (json.type === 'config' && json.granularity) {
+        config.granularity = json.granularity;
+
+        // Reiniciar conexión con Deriv con nuevo config
+        if (derivWs) derivWs.close();
+
+        console.log('⚙️ Configuración actualizada:', config);
+
+        ws.send(JSON.stringify({ type: 'config', status: 'ok', config }));
+      }
+    } catch (e) {
+      console.error('Mensaje no válido:', msg);
+    }
+  });
+
+  ws.on('close', () => {
+    console.log('🔌 Cliente desconectado');
+  });
 });
