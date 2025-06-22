@@ -54,7 +54,7 @@ let derivWs;
 let reconectando = false;
 
 function conectarDeriv() {
-  derivWs = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
+  new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
 
   derivWs.on('open', () => {
     console.log('📡 Conectado a WebSocket de Deriv');
